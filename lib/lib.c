@@ -99,7 +99,7 @@ int recv_from_any_link(char *frame_data, size_t *length) {
 	return -1;
 }
 
-char *get_interface_ip(int interface)
+uint32_t get_interface_ip(int interface)
 {
 	struct ifreq ifr;
 	int ret;
@@ -110,7 +110,7 @@ char *get_interface_ip(int interface)
 	}
 	ret = ioctl(interfaces[interface], SIOCGIFADDR, &ifr);
 	DIE(ret == -1, "ioctl SIOCGIFADDR");
-	return inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr);
+	return (((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr.s_addr);
 }
 
 void get_interface_mac(int interface, uint8_t *mac)

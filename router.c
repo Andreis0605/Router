@@ -42,6 +42,7 @@ struct arp_table_entry *get_mac_entry(uint32_t ip_dest, struct arp_table_entry *
 	return NULL;
 }
 
+// function that compares 2 rtable entries
 int compare_rtable_entry(const void *x, const void *y)
 {
 	struct route_table_entry *entry_x = (struct route_table_entry *)x;
@@ -186,6 +187,7 @@ int main(int argc, char *argv[])
 
 		interface = recv_from_any_link(buf, &len);
 		DIE(interface < 0, "recv_from_any_links");
+		//printf("%02X\n", get_interface_ip(interface));
 
 		struct ether_header *eth_hdr = (struct ether_header *)buf;
 		/* Note that packets received are in network order,
@@ -198,58 +200,144 @@ int main(int argc, char *argv[])
 
 			//  getting the ip_header
 			struct iphdr *ip_hdr = (struct iphdr *)(buf + sizeof(struct ether_header));
-
-			// doing the checksum verification
-			uint16_t aux_check_h = ntohs(ip_hdr->check);
-			ip_hdr->check = 0;
-			if (aux_check_h != checksum((uint16_t *)ip_hdr, sizeof(struct iphdr)))
+			if (ip_hdr->protocol == 1 && ip_hdr->daddr == get_interface_ip(interface))
 			{
-				continue;
-			}
+				struct icmphdr *icmp_hdr = (struct icmphdr *)(buf + sizeof(struct ether_header) + sizeof(struct iphdr));
+				if (icmp_hdr->type == 8 )
+				{
+					// switching the ethernet header;
+					uint8_t mac_aux[6];
+					memcpy(mac_aux, eth_hdr->ether_shost, 6);
+					memcpy(eth_hdr->ether_shost, eth_hdr->ether_dhost, 6);
+					memcpy(eth_hdr->ether_dhost, mac_aux, 6);
 
-			// handle the ttl field
-			uint8_t aux_ttl_h = ip_hdr->ttl;
-			// printf(" %d ", aux_ttl_h);
-			if (aux_ttl_h < 2)
-			{
-				// TODO: send ICMP message
-				send_ICMP_ttl_exceded(eth_hdr, ip_hdr, interface);
-				continue;
+					// switching the ipv4 header
+					uint32_t aux_addr;
+					aux_addr = ip_hdr->saddr;
+					ip_hdr->saddr = ip_hdr->daddr;
+					ip_hdr->daddr = aux_addr;
+
+					// modify the ICMP type
+					icmp_hdr->type = 0;
+
+					// recalculate the checksums
+					ip_hdr->check = 0;
+					ip_hdr->check = htons(checksum((uint16_t *)ip_hdr, sizeof(struct iphdr)));
+
+					icmp_hdr->checksum = 0;
+					icmp_hdr->checksum = htons(checksum((uint16_t *)icmp_hdr, sizeof(struct icmphdr)));
+
+					// send the package
+					send_to_link(interface, buf, len);
+				}
+				else
+				{
+					uint16_t aux_check_h = ntohs(ip_hdr->check);
+					ip_hdr->check = 0;
+					if (aux_check_h != checksum((uint16_t *)ip_hdr, sizeof(struct iphdr)))
+					{
+						continue;
+					}
+
+					// handle the ttl field
+					uint8_t aux_ttl_h = ip_hdr->ttl;
+					// printf(" %d ", aux_ttl_h);
+					if (aux_ttl_h < 2)
+					{
+						// TODO: send ICMP message
+						send_ICMP_ttl_exceded(eth_hdr, ip_hdr, interface);
+						continue;
+					}
+					else
+						aux_ttl_h -= 1;
+					ip_hdr->ttl = aux_ttl_h;
+
+					// search the next hop in the rtable
+					struct route_table_entry *best_route = get_best_route(ip_hdr->daddr, rtable, rtable_len);
+					if (best_route == NULL)
+					{
+						// TODO: send the ICMP package
+						send_ICMP_dest_unreach(eth_hdr, ip_hdr, interface);
+						continue;
+					}
+					// printf("%x\n", ntohl(best_route->next_hop));
+					// printf("trec de next hop");
+
+					// update the checksum
+					ip_hdr->check = 0;
+					aux_check_h = checksum((uint16_t *)ip_hdr, sizeof(struct iphdr));
+					ip_hdr->check = htons(aux_check_h);
+
+					// printf("%x", ip_hdr->check);
+
+					// update the ethernet header
+
+					// get the next_hop MAC
+					struct arp_table_entry *nexthop_mac = get_mac_entry(best_route->next_hop, arp_table, arp_table_len);
+					// printf("%x %x %x %x %x %x", nexthop_mac->mac[0], nexthop_mac->mac[1], nexthop_mac->mac[2], nexthop_mac->mac[3], nexthop_mac->mac[4], nexthop_mac->mac[5]);
+
+					// source address
+					get_interface_mac(best_route->interface, eth_hdr->ether_shost);
+					memcpy(eth_hdr->ether_dhost, nexthop_mac->mac, sizeof(eth_hdr->ether_dhost));
+
+					// send the package
+					send_to_link(best_route->interface, buf, len);
+				}
 			}
 			else
-				aux_ttl_h -= 1;
-			ip_hdr->ttl = aux_ttl_h;
-
-			// search the next hop in the rtable
-			struct route_table_entry *best_route = get_best_route(ip_hdr->daddr, rtable, rtable_len);
-			if (best_route == NULL)
 			{
-				// TODO: send the ICMP package
-				send_ICMP_dest_unreach(eth_hdr, ip_hdr, interface);
-				continue;
+				// doing the checksum verification
+				uint16_t aux_check_h = ntohs(ip_hdr->check);
+				ip_hdr->check = 0;
+				if (aux_check_h != checksum((uint16_t *)ip_hdr, sizeof(struct iphdr)))
+				{
+					continue;
+				}
+
+				// handle the ttl field
+				uint8_t aux_ttl_h = ip_hdr->ttl;
+				// printf(" %d ", aux_ttl_h);
+				if (aux_ttl_h < 2)
+				{
+					// TODO: send ICMP message
+					send_ICMP_ttl_exceded(eth_hdr, ip_hdr, interface);
+					continue;
+				}
+				else
+					aux_ttl_h -= 1;
+				ip_hdr->ttl = aux_ttl_h;
+
+				// search the next hop in the rtable
+				struct route_table_entry *best_route = get_best_route(ip_hdr->daddr, rtable, rtable_len);
+				if (best_route == NULL)
+				{
+					// TODO: send the ICMP package
+					send_ICMP_dest_unreach(eth_hdr, ip_hdr, interface);
+					continue;
+				}
+				// printf("%x\n", ntohl(best_route->next_hop));
+				// printf("trec de next hop");
+
+				// update the checksum
+				ip_hdr->check = 0;
+				aux_check_h = checksum((uint16_t *)ip_hdr, sizeof(struct iphdr));
+				ip_hdr->check = htons(aux_check_h);
+
+				// printf("%x", ip_hdr->check);
+
+				// update the ethernet header
+
+				// get the next_hop MAC
+				struct arp_table_entry *nexthop_mac = get_mac_entry(best_route->next_hop, arp_table, arp_table_len);
+				// printf("%x %x %x %x %x %x", nexthop_mac->mac[0], nexthop_mac->mac[1], nexthop_mac->mac[2], nexthop_mac->mac[3], nexthop_mac->mac[4], nexthop_mac->mac[5]);
+
+				// source address
+				get_interface_mac(best_route->interface, eth_hdr->ether_shost);
+				memcpy(eth_hdr->ether_dhost, nexthop_mac->mac, sizeof(eth_hdr->ether_dhost));
+
+				// send the package
+				send_to_link(best_route->interface, buf, len);
 			}
-			// printf("%x\n", ntohl(best_route->next_hop));
-			// printf("trec de next hop");
-
-			// update the checksum
-			ip_hdr->check = 0;
-			aux_check_h = checksum((uint16_t *)ip_hdr, sizeof(struct iphdr));
-			ip_hdr->check = htons(aux_check_h);
-
-			// printf("%x", ip_hdr->check);
-
-			// update the ethernet header
-
-			// get the next_hop MAC
-			struct arp_table_entry *nexthop_mac = get_mac_entry(best_route->next_hop, arp_table, arp_table_len);
-			// printf("%x %x %x %x %x %x", nexthop_mac->mac[0], nexthop_mac->mac[1], nexthop_mac->mac[2], nexthop_mac->mac[3], nexthop_mac->mac[4], nexthop_mac->mac[5]);
-
-			// source address
-			get_interface_mac(best_route->interface, eth_hdr->ether_shost);
-			memcpy(eth_hdr->ether_dhost, nexthop_mac->mac, sizeof(eth_hdr->ether_dhost));
-
-			// send the package
-			send_to_link(best_route->interface, buf, len);
 		}
 	}
 	free(rtable);

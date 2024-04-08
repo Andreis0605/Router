@@ -46,7 +46,7 @@ struct arp_table_entry {
     uint8_t mac[6];
 };
 
-char *get_interface_ip(int interface);
+uint32_t get_interface_ip(int interface);
 
 /**
  * @brief Get the interface mac object. The function writes
