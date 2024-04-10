@@ -1,3 +1,126 @@
 Setting up interface: rr-0-1
 Setting up interface: r-0
 Setting up interface: r-1
+806
+Primesc un packet arp
+800
+Nu am gasit MAC in Arp_table2
+806
+Primesc un packet arp
+Am primit un arp reply
+Scriu in arp_table
+Merge dequeue si imi da 0x55940dc20450 si len 34
+Merge sa iau headerele
+c0a80102
+Gasesc best route care e 0x7ec654f74080
+Trec de checksum
+Trec de gasirea MACului
+Trec e primul while
+800
+Nu am gasit MAC in Arp_table2
+806
+Primesc un packet arp
+Am primit un arp reply
+Scriu in arp_table
+Merge dequeue si imi da 0x55940dc204e0 si len 62
+Merge sa iau headerele
+c0a80002
+Gasesc best route care e 0x7ec654f74090
+Trec de checksum
+Trec de gasirea MACului
+Trec e primul while
+806
+Primesc un packet arp
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+806
+Primesc un packet arp
+800
+800
+Nu am gasit MAC in Arp_table2
+806
+Primesc un packet arp
+Am primit un arp reply
+Scriu in arp_table
+Merge dequeue si imi da 0x55940dc20550 si len 34
+Merge sa iau headerele
+c0a80302
+Gasesc best route care e 0x7ec654f74060
+Trec de checksum
+Trec de gasirea MACului
+Trec e primul while
+806
+Primesc un packet arp
+Am primit un arp reply
+Scriu in arp_table
+Trec e primul while
+806
+Primesc un packet arp
+806
+Primesc un packet arp
+800
+800
+800
+806
+Primesc un packet arp
+800
+800
+800
+800
+806
+Primesc un packet arp
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+806
+Primesc un packet arp
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
+800
