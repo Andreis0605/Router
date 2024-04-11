@@ -5,11 +5,34 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <inttypes.h>
-#include "trie.h"
+
+void bsearch_rtable(int left, int right, int *best_pos, uint32_t ip_dest, struct route_table_entry *rtable)
+{
+	if (right < left)
+	{
+		return ;
+	}
+	else
+	{
+		int mid = (left + right) / 2;
+		if ((ip_dest & rtable[mid].mask) == rtable[mid].prefix)
+		{
+			*best_pos = mid;
+			bsearch_rtable(left,mid-1,best_pos,ip_dest,rtable);
+		}
+		else
+		{
+			if (ntohl(ip_dest)<ntohl(rtable[mid].prefix))
+				return bsearch_rtable(left, mid - 1, best_pos, ip_dest, rtable);
+			else
+				return bsearch_rtable(mid + 1, right, best_pos, ip_dest, rtable);
+		}
+	}
+}
 
 struct route_table_entry *get_best_route(uint32_t ip_dest, struct route_table_entry *rtable, int rtable_len)
 {
-	struct route_table_entry *best_entry = NULL;
+	/*struct route_table_entry *best_entry = NULL;
 
 	for (int i = 0; i < rtable_len; i++)
 	{
@@ -19,7 +42,12 @@ struct route_table_entry *get_best_route(uint32_t ip_dest, struct route_table_en
 		}
 	}
 
-	return best_entry;
+	return best_entry;*/
+
+	int best_match = -1;
+	bsearch_rtable(0,rtable_len-1,&best_match, ip_dest,rtable );
+	if(best_match == -1) return NULL;
+	else return &rtable[best_match];
 }
 
 struct arp_table_entry *get_mac_entry(uint32_t ip_dest, struct arp_table_entry *arp_table, int arp_table_len)
@@ -38,20 +66,20 @@ struct arp_table_entry *get_mac_entry(uint32_t ip_dest, struct arp_table_entry *
 	return NULL;
 }
 
-// function that compares 2 rtable entries
+// function that compares 2 rtable entries for sorting
 int compare_rtable_entry(const void *x, const void *y)
 {
 	struct route_table_entry *entry_x = (struct route_table_entry *)x;
 	struct route_table_entry *entry_y = (struct route_table_entry *)y;
 
-	if (entry_x->mask < entry_y->mask)
+	if (ntohl(entry_x->mask) < ntohl(entry_y->mask))
 		return 1;
-	if (entry_x->mask > entry_y->mask)
+	if (ntohl(entry_x->mask) > ntohl(entry_y->mask))
 		return -1;
 
-	if (entry_x->prefix < entry_y->prefix)
+	if (ntohl(entry_x->prefix) > ntohl(entry_y->prefix))
 		return 1;
-	if (entry_x->prefix > entry_y->prefix)
+	if (ntohl(entry_x->prefix) < ntohl(entry_y->prefix))
 		return -1;
 
 	return 0;
@@ -219,6 +247,11 @@ int main(int argc, char *argv[])
 
 	// sort the rtable
 	qsort(rtable, rtable_len, sizeof(struct route_table_entry), compare_rtable_entry);
+
+	for (int i = 0; i < rtable_len; i++)
+	{
+		printf("%02x %02x %02x %d\n", ntohl(rtable[i].prefix), ntohl(rtable[i].mask), rtable[i].next_hop, rtable[i].interface);
+	}
 
 	// declaring and allocating memory for the ARP table
 	struct arp_table_entry *arp_table = malloc(sizeof(struct arp_table_entry) * 1000);
