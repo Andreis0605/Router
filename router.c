@@ -273,11 +273,6 @@ int main(int argc, char *argv[])
 	// sort the rtable
 	qsort(rtable, rtable_len, sizeof(struct route_table_entry), compare_rtable_entry);
 
-	/*for (int i = 0; i < rtable_len; i++)
-	{
-		printf("%02x %02x %02x %d\n", ntohl(rtable[i].prefix), ntohl(rtable[i].mask), rtable[i].next_hop, rtable[i].interface);
-	}*/
-
 	// declaring and allocating memory for the ARP table
 	struct arp_table_entry *arp_table = malloc(sizeof(struct arp_table_entry) * 1000);
 	int arp_table_len = 0;
@@ -298,16 +293,12 @@ int main(int argc, char *argv[])
 
 		interface = recv_from_any_link(buf, &len);
 		DIE(interface < 0, "recv_from_any_links");
-		// printf("%02X\n", get_interface_ip(interface));
 
 		struct ether_header *eth_hdr = (struct ether_header *)buf;
 		/* Note that packets received are in network order,
 		any header field which has more than 1 byte will need to be conerted to
 		host order. For example, ntohs(eth_hdr->ether_type). The oposite is needed when
 		sending a packet on the link, */
-
-		printf("%02x\n", ntohs(eth_hdr->ether_type));
-		fflush(NULL);
 
 		if (ntohs(eth_hdr->ether_type) == 0x0800)
 		{
@@ -357,6 +348,7 @@ int main(int argc, char *argv[])
 					uint8_t aux_ttl_h = ip_hdr->ttl;
 					if (aux_ttl_h < 2)
 					{
+						// Time exceeded, send the ICMP message
 						send_ICMP_ttl_exceded(eth_hdr, ip_hdr, interface);
 						continue;
 					}
@@ -368,6 +360,7 @@ int main(int argc, char *argv[])
 					struct route_table_entry *best_route = get_best_rtable_entry(ip_hdr->daddr, rtable, rtable_len);
 					if (best_route == NULL)
 					{
+						// Destination unreachable, send the ICMP message
 						send_ICMP_dest_unreach(eth_hdr, ip_hdr, interface);
 						continue;
 					}
@@ -383,7 +376,6 @@ int main(int argc, char *argv[])
 					struct arp_table_entry *nexthop_mac = get_arp_table_entry(best_route->next_hop, arp_table, arp_table_len);
 					if (nexthop_mac == NULL)
 					{
-						printf("Nu am gasit MAC in Arp_table1\n");
 						// we dont know the MAC of the next hop
 
 						// make a copy of the packet and the len
@@ -422,10 +414,9 @@ int main(int argc, char *argv[])
 
 				// handle the ttl field
 				uint8_t aux_ttl_h = ip_hdr->ttl;
-				// printf(" %d ", aux_ttl_h);
 				if (aux_ttl_h < 2)
 				{
-					// TODO: send ICMP message
+					// Time exceeded, send ICMP message
 					send_ICMP_ttl_exceded(eth_hdr, ip_hdr, interface);
 					continue;
 				}
@@ -437,7 +428,7 @@ int main(int argc, char *argv[])
 				struct route_table_entry *best_route = get_best_rtable_entry(ip_hdr->daddr, rtable, rtable_len);
 				if (best_route == NULL)
 				{
-					// TODO: send the ICMP package
+					// Destination unreachable, send the ICMP message
 					send_ICMP_dest_unreach(eth_hdr, ip_hdr, interface);
 					continue;
 				}
@@ -449,16 +440,12 @@ int main(int argc, char *argv[])
 				aux_check_h = checksum((uint16_t *)ip_hdr, sizeof(struct iphdr));
 				ip_hdr->check = htons(aux_check_h);
 
-				// printf("%x", ip_hdr->check);
-
 				// update the ethernet header
 
 				// get the next_hop MAC
 				struct arp_table_entry *nexthop_mac = get_arp_table_entry(best_route->next_hop, arp_table, arp_table_len);
 				if (nexthop_mac == NULL)
 				{
-					//printf("Nu am gasit MAC in Arp_table2\n");
-
 					char *aux_buf = malloc(len);
 					int *aux_len = malloc(sizeof(int));
 
@@ -473,8 +460,6 @@ int main(int argc, char *argv[])
 					send_arp_request(best_route->next_hop, best_route->interface);
 					continue;
 				}
-				// printf("%x %x %x %x %x %x", nexthop_mac->mac[0], nexthop_mac->mac[1], nexthop_mac->mac[2], nexthop_mac->mac[3], nexthop_mac->mac[4], nexthop_mac->mac[5]);
-
 				// source address
 				get_interface_mac(best_route->interface, eth_hdr->ether_shost);
 				memcpy(eth_hdr->ether_dhost, nexthop_mac->mac, sizeof(eth_hdr->ether_dhost));
@@ -485,8 +470,6 @@ int main(int argc, char *argv[])
 		}
 		else
 		{
-			printf("Primesc un packet arp\n");
-			fflush(NULL);
 			// handle the arp packet
 			struct arp_header *arp_hdr = (struct arp_header *)(buf + sizeof(struct ether_header));
 			uint8_t aux_mac[6];
@@ -495,6 +478,7 @@ int main(int argc, char *argv[])
 			// somebody asking for my MAC adress
 			if (arp_hdr->op == htons(1) && arp_hdr->tpa == get_interface_ip(interface))
 			{
+				//send it to them
 				send_arp_reply(eth_hdr, arp_hdr, interface);
 				continue;
 			}
@@ -502,15 +486,10 @@ int main(int argc, char *argv[])
 			// get a reply for a previous request
 			if (arp_hdr->op == htons(2) && arp_hdr->tpa == get_interface_ip(interface))
 			{
-				/*printf("Am primit un arp reply\n");
-				fflush(NULL);*/
 				// add the response to the ARP_table
 				memcpy(arp_table[arp_table_len].mac, arp_hdr->sha, 6);
 				arp_table[arp_table_len].ip = arp_hdr->spa;
 				arp_table_len++;
-
-				printf("Scriu in arp_table\n");
-				fflush(NULL);
 
 				// iterate through the queue of packets
 
@@ -520,24 +499,12 @@ int main(int argc, char *argv[])
 					char *buf = queue_deq(waiting_to_be_sent_packet);
 					int *buf_len = queue_deq(waiting_to_be_sent_len);
 
-					/*printf("Merge dequeue si imi da %p si len %u\n", buf, *buf_len);
-					fflush(NULL);*/
-
 					// get the headers
 					struct ether_header *eth_hdr_buf = (struct ether_header *)buf;
 					struct iphdr *ip_hdr_buf = (struct iphdr *)(buf + sizeof(struct ether_header));
 
-					/*printf("Merge sa iau headerele\n");
-					fflush(NULL);
-
-					printf("%02x\n", ntohl(ip_hdr_buf->daddr));
-					fflush(NULL);*/
-
 					// get the interface for the packet
 					struct route_table_entry *best_route = get_best_rtable_entry(ip_hdr_buf->daddr, rtable, rtable_len);
-
-					/*printf("Gasesc best route care e %p\n", best_route);
-					fflush(NULL);*/
 
 					// recalculate the checksum
 					ip_hdr_buf->check = 0;
@@ -557,9 +524,6 @@ int main(int argc, char *argv[])
 						continue;
 					}
 
-					/*printf("Trec de gasirea MACului\n");
-					fflush(NULL);*/
-
 					// write the mac addresses
 					get_interface_mac(best_route->interface, eth_hdr_buf->ether_shost);
 					memcpy(eth_hdr_buf->ether_dhost, nexthop_mac->mac, sizeof(eth_hdr_buf->ether_dhost));
@@ -571,9 +535,6 @@ int main(int argc, char *argv[])
 					free(buf_len);
 				}
 
-				/*printf("Trec e primul while\n");
-				fflush(NULL);*/
-
 				// spill the aux_queue in the main queue
 				while (!queue_empty(aux_queue_buf))
 				{
@@ -583,23 +544,6 @@ int main(int argc, char *argv[])
 					queue_enq(waiting_to_be_sent_len, buf_len2);
 				}
 
-				printf("-------------------------------\n");
-				printf("Un arp reply primit\n");
-				for (int i = 0; i < arp_table_len; i++)
-				{
-					printf("Entry %d: Mac: ",i);
-					for (int j = 0; j < 6; j++)
-					{
-						printf("%02x.", arp_table[i].mac[j]);
-					}
-					printf(" IP: ");
-					printf("%d.%d.%d.%d\n",
-						   (ntohl(arp_table[i].ip) >> 24) & 0xFF, // First octet
-						   (ntohl(arp_table[i].ip) >> 16) & 0xFF, // Second octet
-						   (ntohl(arp_table[i].ip) >> 8) & 0xFF,  // Third octet
-						   ntohl(arp_table[i].ip) & 0xFF);
-				}
-				printf("-------------------------------\n");
 			}
 		}
 	}
